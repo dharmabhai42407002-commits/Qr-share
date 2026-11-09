@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRShare – Privacy-Focused Secure File Sharing</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- QRCode.js for dynamic QR generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            850: '#111827',
+                            950: '#0B0F19'
+                        },
+                        brand: {
+                            500: '#6366F1',
+                            600: '#4F46E5',
+                            400: '#818CF8',
+                            glow: 'rgba(99, 102, 241, 0.35)'
+                        }
+                    },
+                    boxShadow: {
+                        'neu-dark': '9px 9px 18px #070a11, -9px -9px 18px #0f1421',
+                        'neu-dark-inset': 'inset 5px 5px 10px #070a11, inset -5px -5px 10px #0f1421',
+                        'glass-glow': '0 8px 32px 0 rgba(99, 102, 241, 0.25)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: #0B0F19;
+            color: #E2E8F0;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphic backdrop blur */
+        .glass-card {
+            background: rgba(17, 24, 39, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card-hover:hover {
+            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 10px 30px -10px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Laser Scan Line Animation for QR Scanner */
+        @keyframes scan {
+            0% { top: 5%; opacity: 0.8; }
+            50% { top: 90%; opacity: 1; }
+            100% { top: 5%; opacity: 0.8; }
+        }
+        .laser-line {
+            position: absolute;
+            width: 90%;
+            left: 5%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #818CF8, #6366F1, #818CF8, transparent);
+            box-shadow: 0 0 15px #6366F1, 0 0 8px #818CF8;
+            animation: scan 2.5s ease-in-out infinite;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0B0F19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1E293B;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4F46E5;
+        }
+
+        /* Pulse glow background elements */
+        .bg-glow-purple {
+            background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, rgba(11,15,25,0) 70%);
+        }
+        .bg-glow-teal {
+            background: radial-gradient(circle, rgba(20,184,166,0.12) 0%, rgba(11,15,25,0) 70%);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+
+    <!-- Ambient Glow Backgrounds -->
+    <div class="fixed top-0 left-1/4 w-96 h-96 bg-glow-purple pointer-events-none rounded-full blur-3xl -z-10"></div>
+    <div class="fixed bottom-10 right-1/4 w-96 h-96 bg-glow-teal pointer-events-none rounded-full blur-3xl -z-10"></div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+    <!-- Header / Sticky Navigation -->
+    <header class="sticky top-0 z-40 glass-card border-b border-slate-800/80 px-4 lg:px-8 py-3 transition-all duration-300">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('send')">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-brand-500/30">
+                    <i data-lucide="qr-code" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-brand-400 bg-clip-text text-transparent">QRShare</span>
+                    <span class="hidden sm:inline-block text-[10px] uppercase font-bold tracking-widest text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded-full ml-2 border border-brand-500/20">Demo Mode</span>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <nav class="flex items-center gap-1 sm:gap-2 bg-slate-950/60 p-1.5 rounded-2xl border border-slate-800 shadow-neu-dark-inset">
+                <button onclick="switchTab('send')" id="nav-send" class="tab-btn flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all text-white bg-brand-600 shadow-md">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                    <span>Send</span>
+                </button>
+                <button onclick="switchTab('receive')" id="nav-receive" class="tab-btn flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-slate-200 transition-all">
+                    <i data-lucide="scan" class="w-4 h-4"></i>
+                    <span>Receive / Scan</span>
+                </button>
+                <button onclick="switchTab('recent')" id="nav-recent" class="tab-btn flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-slate-200 transition-all">
+                    <i data-lucide="history" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Recent Shares</span>
+                    <span class="md:hidden">Recent</span>
+                </button>
+                <button onclick="switchTab('security')" id="nav-security" class="tab-btn flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-400 hover:text-slate-200 transition-all">
+                    <i data-lucide="shield-check" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Security</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
+
+        <!-- TAB 1: SEND FILES -->
+        <section id="tab-send" class="tab-content block space-y-6 animate-fadeIn">
+            <!-- Header Banner -->
+            <div class="text-center max-w-2xl mx-auto space-y-2 mb-8">
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    Share Files <span class="bg-gradient-to-r from-brand-400 to-teal-400 bg-clip-text text-transparent">Instantly & Privately</span>
+                </h1>
+                <p class="text-slate-400 text-sm sm:text-base">
+                    End-to-end encrypted sharing with self-destructing QR codes and PIN verification. No registration needed.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                <!-- Dropzone & File List Card -->
+                <div class="lg:col-span-7 glass-card rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                    <div id="drop-zone" class="border-2 border-dashed border-slate-700/80 hover:border-brand-500/80 rounded-2xl p-8 text-center transition-all cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 group">
+                        <input type="file" id="file-input" multiple class="hidden">
+                        <div class="w-16 h-16 bg-brand-500/10 text-brand-400 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:bg-brand-500/20 transition-all border border-brand-500/20">
+                            <i data-lucide="file-up" class="w-8 h-8"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-white mb-1">Drag and drop your files here</h3>
+                        <p class="text-xs text-slate-400 mb-4">Supports Images, Documents, Videos & Archives up to 500MB</p>
+                        <button type="button" onclick="document.getElementById('file-input').click()" class="px-5 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 transition-all shadow-neu-dark">
+                            Browse Files
+                        </button>
+                    </div>
+
+                    <!-- Selected Files Preview Container -->
+                    <div id="selected-files-container" class="mt-6 space-y-3 hidden">
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-400 border-b border-slate-800 pb-2">
+                            <span>Selected Files (<span id="file-count">0</span>)</span>
+                            <button onclick="clearSelectedFiles()" class="text-rose-400 hover:underline">Clear All</button>
+                        </div>
+                        <div id="file-list" class="max-h-60 overflow-y-auto space-y-2 pr-1"></div>
+                    </div>
+                </div>
+
+                <!-- Share Security Settings Panel -->
+                <div class="lg:col-span-5 glass-card rounded-3xl p-6 shadow-2xl space-y-6">
+                    <div class="flex items-center gap-2 text-white font-semibold border-b border-slate-800 pb-3">
+                        <i data-lucide="sliders" class="w-5 h-5 text-brand-400"></i>
+                        <h2>Sharing Options</h2>
+                    </div>
+
+                    <!-- PIN Protection Toggle & Input -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                                <i data-lucide="lock" class="w-4 h-4 text-emerald-400"></i>
+                                Require 6-Digit PIN Protection
+                            </label>
+                            <input type="checkbox" id="setting-pin-toggle" checked class="w-4 h-4 accent-brand-500 rounded cursor-pointer">
+                        </div>
+                        <div id="pin-input-group" class="relative">
+                            <input type="text" id="setting-pin" maxlength="6" value="482619" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono tracking-widest text-center font-bold text-brand-400 focus:outline-none focus:border-brand-500 shadow-neu-dark-inset">
+                            <button type="button" onclick="generateRandomPin()" class="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-white flex items-center gap-1">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Auto
+                            </button>
+                        </div>
+                        <p class="text-[11px] text-slate-400">Recipients will need this PIN to download files.</p>
+                    </div>
+
+                    <!-- Expiration Selector -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                            <i data-lucide="clock" class="w-4 h-4 text-amber-400"></i>
+                            Expiration Time
+                        </label>
+                        <select id="setting-expiry" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500 shadow-neu-dark-inset">
+                            <option value="10m">10 Minutes (Self-Destruct)</option>
+                            <option value="1h" selected>1 Hour</option>
+                            <option value="24h">24 Hours</option>
+                            <option value="7d">7 Days</option>
+                        </select>
+                    </div>
+
+                    <!-- Download Limit -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                            <i data-lucide="download" class="w-4 h-4 text-sky-400"></i>
+                            Max Download Limit
+                        </label>
+                        <select id="setting-downloads" class="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500 shadow-neu-dark-inset">
+                            <option value="1">1 Download Only (One-Time Access)</option>
+                            <option value="5" selected>5 Downloads Max</option>
+                            <option value="20">20 Downloads Max</option>
+                            <option value="unlimited">Unlimited</option>
+                        </select>
+                    </div>
+
+                    <!-- Generate Share Button -->
+                    <button id="btn-generate-share" onclick="handleCreateShare()" class="w-full py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i data-lucide="qr-code" class="w-4 h-4"></i>
+                        <span>Generate QR & Share Hub</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SHARE HUB MODAL / SUCCESS OVERLAY -->
+        <div id="share-hub-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden animate-fadeIn">
+            <div class="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-slate-700/60 shadow-2xl space-y-6 relative">
+                <button onclick="closeShareModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+
+                <div class="text-center space-y-1">
+                    <div class="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-2">
+                        <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white">Files Ready to Share!</h3>
+                    <p class="text-xs text-slate-400">Scan QR code or use the secret PIN & link below.</p>
+                </div>
+
+                <!-- QR Code Display Frame -->
+                <div class="bg-white p-4 rounded-2xl w-48 h-48 mx-auto flex items-center justify-center shadow-inner relative group border-4 border-slate-800" id="qr-canvas-container">
+                    <div id="qrcode"></div>
+                </div>
+
+                <!-- Details Grid -->
+                <div class="bg-slate-950/60 p-4 rounded-2xl border border-slate-800 space-y-3 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400">Required PIN:</span>
+                        <span id="hub-pin" class="font-mono font-bold text-brand-400 text-sm tracking-wider">482619</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400">Share Link:</span>
+                        <div class="flex items-center gap-1 font-mono text-slate-300">
+                            <span id="hub-link" class="truncate max-w-[180px]">https://qrshare.io/s/demo99</span>
+                            <button onclick="copyToClipboard('https://qrshare.io/s/demo99')" class="text-brand-400 hover:text-brand-300 p-1">
+                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
+                        <span>Expires in <strong id="hub-expiry" class="text-slate-200">1 Hour</strong></span>
+                        <span>Limit: <strong id="hub-limit" class="text-slate-200">5 Downloads</strong></span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="downloadQRCode()" class="py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i> Download QR
+                    </button>
+                    <button onclick="copyToClipboard('https://qrshare.io/s/demo99')" class="py-2.5 px-4 rounded-xl text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center gap-2">
+                        <i data-lucide="link" class="w-4 h-4"></i> Copy Link
+                    </button>
+                </div>
+
+                <div class="pt-2 text-center">
+                    <button onclick="closeShareModal()" class="text-xs text-slate-400 hover:text-slate-200">Done & Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: RECEIVE / SCAN QR -->
+        <section id="tab-receive" class="tab-content hidden space-y-8 animate-fadeIn">
+            <div class="text-center max-w-xl mx-auto space-y-2">
+                <h2 class="text-3xl font-extrabold text-white">Receive Files</h2>
+                <p class="text-slate-400 text-sm">Scan a QR Code or enter a 6-digit access PIN to unlock and download shared files.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto items-start">
+                
+                <!-- PIN Verification Card -->
+                <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-800">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center border border-brand-500/20">
+                            <i data-lucide="key-round" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-white">Enter Access PIN</h3>
+                            <p class="text-xs text-slate-400">Demo PIN available: <span class="font-mono text-brand-400 font-bold">482619</span></p>
+                        </div>
+                    </div>
+
+                    <!-- 6 Digit Input Boxes -->
+                    <div class="flex justify-between gap-2" id="pin-inputs-container">
+                        <input type="text" maxlength="1" class="pin-digit-input w-11 h-13 text-center font-mono text-xl font-bold bg-slate-950 border border-slate-800 rounded-xl text-brand-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-neu-dark-inset">
+                        <input type="text" maxlength="1" class="pin-digit-input w-11 h-13 text-center font-mono text-xl font-bold bg-slate-950 border border-slate-800 rounded-xl text-brand-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-neu-dark-inset">
+                        <input type="text" maxlength="1" class="pin-digit-input w-11 h-13 text-center font-mono text-xl font-bold bg-slate-950 border border-slate-800 rounded-xl text-brand-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-neu-dark-inset">
+                        <input type="text" maxlength="1" class="pin-digit-input w-11 h-13 text-center font-mono text-xl font-bold bg-slate-950 border border-slate-800 rounded-xl text-brand-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-neu-dark-inset">
+                        <input type="text" maxlength="1" class="pin-digit-input w-11 h-13 text-center font-mono text-xl font-bold bg-slate-950 border border-slate-800 rounded-xl text-brand-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-neu-dark-inset">
+                        <input type="text" maxlength="1" class="pin-digit-input w-11 h-13 text-center font-mono text-xl font-bold bg-slate-950 border border-slate-800 rounded-xl text-brand-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 shadow-neu-dark-inset">
+                    </div>
+
+                    <button onclick="submitPinVerification()" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm transition-all shadow-lg shadow-brand-500/20 flex items-center justify-center gap-2">
+                        <i data-lucide="unlock" class="w-4 h-4"></i> Unlock Share Batch
+                    </button>
+                    
+                    <button onclick="fillDemoPin()" class="w-full text-center text-xs text-slate-400 hover:text-brand-400 transition-colors">
+                        Auto-fill Demo PIN (482619)
+                    </button>
+                </div>
+
+                <!-- Simulated Camera QR Scanner -->
+                <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-4 shadow-2xl border border-slate-800 text-center">
+                    <div class="flex items-center gap-3 text-left">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                            <i data-lucide="camera" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-white">QR Code Scanner</h3>
+                            <p class="text-xs text-slate-400">Position code in camera viewfinder</p>
+                        </div>
+                    </div>
+
+                    <!-- Camera Viewfinder Box -->
+                    <div class="relative w-full aspect-square max-w-[220px] mx-auto bg-slate-950 border-2 border-slate-800 rounded-2xl overflow-hidden flex items-center justify-center shadow-inner group">
+                        <div class="laser-line"></div>
+                        <i data-lucide="qr-code" class="w-24 h-24 text-slate-800"></i>
+                        <span class="absolute bottom-3 text-[10px] text-slate-400 bg-slate-900/80 px-2 py-0.5 rounded-full border border-slate-800">
+                            Simulated Scanner Active
+                        </span>
+                    </div>
+
+                    <div class="pt-2 flex gap-2">
+                        <button onclick="triggerSimulatedScan()" class="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center gap-1.5">
+                            <i data-lucide="aperture" class="w-3.5 h-3.5"></i> Simulate Scan
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- UNLOCKED DOWNLOAD PAGE / BATCH FILE LISTING (Initially Hidden) -->
+            <div id="download-unlocked-section" class="hidden max-w-4xl mx-auto glass-card rounded-3xl p-6 sm:p-8 border border-emerald-500/30 space-y-6 animate-fadeIn shadow-2xl">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                                Access Granted
+                            </span>
+                            <span class="text-xs text-slate-400">Batch ID: <strong class="text-slate-200">#SH-482619</strong></span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white mt-1">Shared Project Assets</h2>
+                        <p class="text-xs text-slate-400">Sender: Anonymous (Encrypted) • Created: 20 mins ago</p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <button onclick="downloadAllFilesSimulated()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2">
+                            <i data-lucide="download-cloud" class="w-4 h-4"></i> Download All (.zip)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Unlocked Files List -->
+                <div id="unlocked-files-list" class="space-y-3">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: RECENT SHARES & STATUS DASHBOARD -->
+        <section id="tab-recent" class="tab-content hidden space-y-6 animate-fadeIn">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Recent Shares</h2>
+                    <p class="text-xs text-slate-400">Manage and monitor active or past file sharing links from this device.</p>
+                </div>
+                <button onclick="loadRecentSharesDashboard()" class="px-3 py-2 rounded-xl text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5">
+                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Refresh List
+                </button>
+            </div>
+
+            <!-- Table Card -->
+            <div class="glass-card rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-950/80 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                            <tr>
+                                <th class="py-3.5 px-4">Batch / Files</th>
+                                <th class="py-3.5 px-4">PIN Code</th>
+                                <th class="py-3.5 px-4">Status</th>
+                                <th class="py-3.5 px-4">Downloads</th>
+                                <th class="py-3.5 px-4">Expires</th>
+                                <th class="py-3.5 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-shares-tbody" class="divide-y divide-slate-800/60 font-medium">
+                            <!-- JS dynamically injects records -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: ABOUT & SECURITY -->
+        <section id="tab-security" class="tab-content hidden space-y-8 animate-fadeIn">
+            <div class="max-w-3xl mx-auto text-center space-y-3">
+                <div class="w-16 h-16 bg-brand-500/10 text-brand-400 border border-brand-500/20 rounded-2xl flex items-center justify-center mx-auto">
+                    <i data-lucide="shield-check" class="w-8 h-8"></i>
+                </div>
+                <h2 class="text-3xl font-extrabold text-white">Privacy-First Architecture</h2>
+                <p class="text-slate-400 text-sm">QRShare is built on the philosophy of zero trust, minimal telemetry, and auto-purging temporary storage.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="glass-card rounded-2xl p-6 space-y-3 border border-slate-800">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                        <i data-lucide="lock" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-white">AES-256 Encryption</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">Files are encrypted before storing. Access PINs act as secondary decryption keys so unauthorized users cannot access payloads.</p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-6 space-y-3 border border-slate-800">
+                    <div class="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center border border-teal-500/20">
+                        <i data-lucide="flame" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-white">Auto Self-Destruct</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">Configurable expiration timers ensure your data automatically purges from servers once downloaded or expired.</p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-6 space-y-3 border border-slate-800">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                        <i data-lucide="user-x" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-white">No Tracker Policy</h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">No account registration, no tracking cookies, and no IP logging. Anonymous peer-to-peer style temporary transfers.</p>
+                </div>
+            </div>
+
+            <!-- API Integration Info for Developers -->
+            <div class="glass-card rounded-3xl p-6 border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i data-lucide="code-2" class="w-4 h-4 text-brand-400"></i> Backend Integration Specification (Flask + Supabase)
+                    </h3>
+                    <span class="text-[10px] font-mono bg-slate-900 text-brand-400 px-2 py-0.5 rounded border border-brand-500/20">ApiService Standard</span>
+                </div>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    This frontend uses a modular <code class="text-brand-400">ApiService</code> layer. Replace mock methods in JS with real endpoints (e.g. <code class="text-slate-200">/api/v1/upload</code> or Supabase bucket uploads) for production deployment.
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="glass-card border-t border-slate-800/80 py-6 px-4 text-center text-xs text-slate-500">
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+                <span>&copy; 2026 QRShare Protocol. Privacy by Design.</span>
+            </div>
+            <div class="flex items-center gap-4 text-slate-400">
+                <a href="#" onclick="switchTab('send')" class="hover:text-brand-400 transition-colors">Send</a>
+                <a href="#" onclick="switchTab('receive')" class="hover:text-brand-400 transition-colors">Receive</a>
+                <a href="#" onclick="switchTab('security')" class="hover:text-brand-400 transition-colors">Docs</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT APP LOGIC & API MOCK SERVICE -->
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Global State & Selected Files Storage
+        const state = {
+            selectedFiles: [],
+            activeTab: 'send',
+            generatedQrObj: null
+        };
+
+        // -------------------------------------------------------------
+        // API SERVICE LAYER (Ready for Flask + Supabase Integration)
+        // -------------------------------------------------------------
+        const ApiService = {
+            // Mock API delay helper
+            async _delay(ms = 600) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            },
+
+            // Upload files mock call
+            async uploadFiles(formData) {
+                await this._delay(800);
+                const pin = formData.get('pin') || '482619';
+                const expiry = formData.get('expiry') || '1h';
+                const shareId = 'share_' + Math.random().toString(36).substr(2, 6);
+                
+                return {
+                    success: true,
+                    shareId: shareId,
+                    shareUrl: `https://qrshare.io/s/${shareId}`,
+                    pin: pin,
+                    expiresIn: expiry,
+                    fileCount: state.selectedFiles.length
+                };
+            },
+
+            // Verify PIN code
+            async verifyPin(pinCode) {
+                await this._delay(600);
+                if (pinCode === '482619' || pinCode.length === 6) {
+                    return {
+                        success: true,
+                        batchId: 'SH-482619',
+                        expiresIn: '45 mins remaining',
+                        files: [
+                            { id: 1, name: 'Project_Design_Brief.pdf', size: '2.4 MB', type: 'pdf' },
+                            { id: 2, name: 'Brand_Logo_Vector.svg', size: '480 KB', type: 'image' },
+                            { id: 3, name: 'App_Architecture_v2.png', size: '1.8 MB', type: 'image' }
+                        ]
+                    };
+                } else {
+                    return { success: false, message: 'Invalid PIN code. Please try again.' };
+                }
+            },
+
+            // Fetch recent shares list
+            async getRecentShares() {
+                await this._delay(300);
+                return [
+                    { id: 'sh_9921', name: 'Design_Assets.zip', pin: '482619', status: 'active', downloads: '2/5', expires: '45m remaining' },
+                    { id: 'sh_4410', name: 'Financial_Report_Q3.pdf', pin: '882190', status: 'active', downloads: '1/1', expires: '12h remaining' },
+                    { id: 'sh_1029', name: 'Raw_Footage_01.mp4', pin: '310492', status: 'expired', downloads: '5/5', expires: 'Expired' },
+                    { id: 'sh_0028', name: 'Confidential_Keys.env', pin: '992011', status: 'revoked', downloads: '0/1', expires: 'Revoked' }
+                ];
+            },
+
+            // Revoke a share link
+            async revokeShare(shareId) {
+                await this._delay(400);
+                return { success: true, shareId };
+            }
+        };
+
+        // -------------------------------------------------------------
+        // UI & NAVIGATION TAB CONTROLLER
+        // -------------------------------------------------------------
+        function switchTab(tabName) {
+            state.activeTab = tabName;
+            
+            // Toggle visibility of contents
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            const target = document.getElementById(`tab-${tabName}`);
+            if (target) target.classList.remove('hidden');
+
+            // Style nav buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-600', 'text-white', 'shadow-md');
+                btn.classList.add('text-slate-400');
+            });
+
+            const activeBtn = document.getElementById(`nav-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.add('bg-brand-600', 'text-white', 'shadow-md');
+                activeBtn.classList.remove('text-slate-400');
+            }
+
+            // Tab specific hooks
+            if (tabName === 'recent') {
+                loadRecentSharesDashboard();
+            }
+        }
+
+        // Toast Notification System
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let colorClasses = 'border-brand-500/30 text-slate-100 bg-slate-900/90';
+            let icon = 'info';
+
+            if (type === 'success') {
+                colorClasses = 'border-emerald-500/40 text-emerald-300 bg-slate-900/95';
+                icon = 'check-circle-2';
+            } else if (type === 'error') {
+                colorClasses = 'border-rose-500/40 text-rose-300 bg-slate-900/95';
+                icon = 'alert-circle';
+            }
+
+            toast.className = `glass-card border ${colorClasses} px-4 py-3 rounded-2xl text-xs font-semibold shadow-2xl flex items-center gap-2 pointer-events-auto animate-fadeIn transition-all transform translate-y-0`;
+            toast.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Copy Helper
+        function copyToClipboard(text) {
+            const tempInput = document.createElement('input');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            showToast('Link copied to clipboard!', 'success');
+        }
+
+        // -------------------------------------------------------------
+        // DRAG & DROP AND FILE MANAGEMENT
+        // -------------------------------------------------------------
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('border-brand-500', 'bg-slate-900/80'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('border-brand-500', 'bg-slate-900/80'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', (e) => handleFilesSelected(e.target.files));
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFilesSelected(files);
+        }
+
+        function handleFilesSelected(files) {
+            Array.from(files).forEach(file => {
+                state.selectedFiles.push(file);
+            });
+            renderSelectedFilesList();
+        }
+
+        function renderSelectedFilesList() {
+            const container = document.getElementById('selected-files-container');
+            const list = document.getElementById('file-list');
+            const count = document.getElementById('file-count');
+
+            if (state.selectedFiles.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            container.classList.remove('hidden');
+            count.innerText = state.selectedFiles.length;
+            list.innerHTML = '';
+
+            state.selectedFiles.forEach((file, idx) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between bg-slate-950/70 p-2.5 rounded-xl border border-slate-800 text-xs';
+                
+                const formattedSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+
+                item.innerHTML = `
+                    <div class="flex items-center gap-2.5 truncate max-w-[80%]">
+                        <div class="p-1.5 rounded-lg bg-slate-900 text-brand-400">
+                            <i data-lucide="file" class="w-4 h-4"></i>
+                        </div>
+                        <div class="truncate">
+                            <p class="font-semibold text-slate-200 truncate">${file.name}</p>
+                            <span class="text-[10px] text-slate-400">${formattedSize}</span>
+                        </div>
+                    </div>
+                    <button onclick="removeFile(${idx})" class="text-slate-500 hover:text-rose-400 p-1">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                `;
+                list.appendChild(item);
+            });
+
+            lucide.createIcons();
+        }
+
+        function removeFile(index) {
+            state.selectedFiles.splice(index, 1);
+            renderSelectedFilesList();
+        }
+
+        function clearSelectedFiles() {
+            state.selectedFiles = [];
+            renderSelectedFilesList();
+            fileInput.value = '';
+        }
+
+        function generateRandomPin() {
+            const pin = Math.floor(100000 + Math.random() * 900000).toString();
+            document.getElementById('setting-pin').value = pin;
+            showToast(`New PIN generated: ${pin}`, 'info');
+        }
+
+        // Handle Create Share Flow
+        async function handleCreateShare() {
+            if (state.selectedFiles.length === 0) {
+                // Add demo file if user clicks without choosing files for easy demonstration
+                state.selectedFiles.push({ name: 'Demo_Document.pdf', size: 1048576 });
+                renderSelectedFilesList();
+                showToast('Added default demo file for upload', 'info');
+            }
+
+            const btn = document.getElementById('btn-generate-share');
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Processing & Encrypting...`;
+            lucide.createIcons();
+
+            const formData = new FormData();
+            formData.append('pin', document.getElementById('setting-pin').value);
+            formData.append('expiry', document.getElementById('setting-expiry').value);
+
+            const result = await ApiService.uploadFiles(formData);
+
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="qr-code" class="w-4 h-4"></i> Generate QR & Share Hub`;
+            lucide.createIcons();
+
+            if (result.success) {
+                openShareModal(result);
+                showToast('Files uploaded & QR code generated!', 'success');
+            }
+        }
+
+        // -------------------------------------------------------------
+        // SHARE HUB MODAL & QR GENERATOR
+        // -------------------------------------------------------------
+        function openShareModal(data) {
+            const modal = document.getElementById('share-hub-modal');
+            document.getElementById('hub-pin').innerText = data.pin;
+            document.getElementById('hub-link').innerText = data.shareUrl;
+
+            // Render Dynamic QR Code
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '';
+            
+            state.generatedQrObj = new QRCode(qrContainer, {
+                text: data.shareUrl,
+                width: 160,
+                height: 160,
+                colorDark: "#0F172A",
+                colorLight: "#FFFFFF",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeShareModal() {
+            document.getElementById('share-hub-modal').classList.add('hidden');
+        }
+
+        function downloadQRCode() {
+            const img = document.querySelector('#qrcode img');
+            if (img && img.src) {
+                const link = document.createElement('a');
+                link.href = img.src;
+                link.download = 'QRShare-Code.png';
+                link.click();
+                showToast('QR Code saved to downloads', 'success');
+            } else {
+                showToast('Generating QR image, please retry...', 'info');
+            }
+        }
+
+        // -------------------------------------------------------------
+        // PIN VERIFICATION & RECIPIENT FLOW
+        // -------------------------------------------------------------
+        // Auto Digit Hop for PIN inputs
+        const pinInputs = document.querySelectorAll('.pin-digit-input');
+        pinInputs.forEach((input, index) => {
+            input.addEventListener('keyup', (e) => {
+                if (e.key >= '0' && e.key <= '9') {
+                    if (index < pinInputs.length - 1) {
+                        pinInputs[index + 1].focus();
+                    }
+                } else if (e.key === 'Backspace') {
+                    if (index > 0) {
+                        pinInputs[index - 1].focus();
+                    }
+                }
+            });
+        });
+
+        function fillDemoPin() {
+            const pinStr = '482619';
+            pinInputs.forEach((input, idx) => {
+                input.value = pinStr[idx] || '';
+            });
+            showToast('Demo PIN auto-filled!', 'info');
+        }
+
+        async function submitPinVerification() {
+            let enteredPin = '';
+            pinInputs.forEach(i => enteredPin += i.value);
+
+            if (enteredPin.length < 6) {
+                showToast('Please enter a full 6-digit PIN', 'error');
+                return;
+            }
+
+            const res = await ApiService.verifyPin(enteredPin);
+            if (res.success) {
+                showToast('PIN verified successfully!', 'success');
+                renderUnlockedFiles(res);
+            } else {
+                showToast(res.message, 'error');
+            }
+        }
+
+        function triggerSimulatedScan() {
+            fillDemoPin();
+            setTimeout(() => {
+                submitPinVerification();
+            }, 400);
+        }
+
+        function renderUnlockedFiles(data) {
+            const section = document.getElementById('download-unlocked-section');
+            const list = document.getElementById('unlocked-files-list');
+            section.classList.remove('hidden');
+
+            list.innerHTML = '';
+            data.files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all text-xs';
+                
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center font-bold">
+                            <i data-lucide="file-text" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-200 text-sm">${file.name}</p>
+                            <span class="text-[11px] text-slate-400">${file.size}</span>
+                        </div>
+                    </div>
+                    <button onclick="downloadSingleFileSimulated('${file.name}')" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-brand-600 text-slate-200 hover:text-white transition-all font-semibold flex items-center gap-1.5 shadow-neu-dark">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> Download
+                    </button>
+                `;
+                list.appendChild(item);
+            });
+
+            lucide.createIcons();
+            // Scroll down to the unlocked area
+            section.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function downloadSingleFileSimulated(fileName) {
+            showToast(`Downloading ${fileName}...`, 'success');
+        }
+
+        function downloadAllFilesSimulated() {
+            showToast('Preparing ZIP download bundle...', 'success');
+        }
+
+        // -------------------------------------------------------------
+        // DASHBOARD & RECENT SHARES
+        // -------------------------------------------------------------
+        async function loadRecentSharesDashboard() {
+            const tbody = document.getElementById('recent-shares-tbody');
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-slate-500"><i data-lucide="loader-2" class="w-5 h-5 animate-spin mx-auto mb-1"></i>Loading history...</td></tr>`;
+            lucide.createIcons();
+
+            const records = await ApiService.getRecentShares();
+            tbody.innerHTML = '';
+
+            records.forEach(rec => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/50 transition-colors';
+
+                let badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                if (rec.status === 'expired') badgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                if (rec.status === 'revoked') badgeColor = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+
+                tr.innerHTML = `
+                    <td class="py-3.5 px-4 font-semibold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="folder-archive" class="w-4 h-4 text-brand-400"></i>
+                        <span>${rec.name}</span>
+                    </td>
+                    <td class="py-3.5 px-4 font-mono text-brand-400 font-bold">${rec.pin}</td>
+                    <td class="py-3.5 px-4">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${badgeColor}">
+                            ${rec.status}
+                        </span>
+                    </td>
+                    <td class="py-3.5 px-4 text-slate-400">${rec.downloads}</td>
+                    <td class="py-3.5 px-4 text-slate-400">${rec.expires}</td>
+                    <td class="py-3.5 px-4 text-right space-x-2">
+                        <button onclick="copyToClipboard('https://qrshare.io/s/${rec.id}')" class="p-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white" title="Copy Link">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button onclick="handleRevokeShare('${rec.id}')" class="p-1.5 bg-slate-900 hover:bg-rose-950 rounded-lg text-slate-400 hover:text-rose-400" title="Revoke Link">
+                            <i data-lucide="ban" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            lucide.createIcons();
+        }
+
+        async function handleRevokeShare(shareId) {
+            const res = await ApiService.revokeShare(shareId);
+            if (res.success) {
+                showToast(`Share ${shareId} has been revoked`, 'error');
+                loadRecentSharesDashboard();
+            }
+        }
+
+        // Application initialization
+        window.onload = function() {
+            switchTab('send');
+        };
+    </script>
+</body>
+</html>
